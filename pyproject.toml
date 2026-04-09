@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "atask"
-version = "0.2.0"
+version = "0.2.0.post1"
 description = "AsyncTask"
 readme = "README.md"
 license = "MIT"
