@@ -13,7 +13,7 @@ from atask import AsyncTask, AsyncTaskGroup
 
 
 class SimpleTask(AsyncTask[int]):
-    async def _run(self) -> int:
+    async def _atask(self) -> int:
         return 42
 
 
@@ -22,18 +22,18 @@ class SlowTask(AsyncTask[str]):
         super().__init__(**kwargs)
         self._delay = delay
 
-    async def _run(self) -> str:
+    async def _atask(self) -> str:
         await aio.sleep(self._delay)
         return "done"
 
 
 class FailingTask(AsyncTask[None]):
-    async def _run(self) -> None:
+    async def _atask(self) -> None:
         raise ValueError("boom")
 
 
 class BareTask(AsyncTask[int]):
-    """Does not override _run – inherits NotImplementedError."""
+    """Does not override _atask – inherits NotImplementedError."""
 
     pass
 
@@ -43,33 +43,33 @@ class LifecycleTask(AsyncTask[int]):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.start_called = False
-        self.stop_called = False
-        self.cancel_called = False
+        self.astart_called = False
+        self.astop_called = False
+        self.acancel_called = False
 
-    async def _run(self) -> int:
+    async def _atask(self) -> int:
         await aio.sleep(0.05)
         return 1
 
-    async def start(self) -> None:
+    async def astart(self) -> None:
         if self.started:
             return
-        self.start_called = True
-        await super().start()
+        self.astart_called = True
+        await super().astart()
 
-    async def cancel(self, msg: Any | None = None) -> None:
+    async def acancel(self, msg: Any | None = None) -> None:
         if not self.started:
             return
-        self.cancel_called = True
-        await super().cancel(msg)
+        self.acancel_called = True
+        await super().acancel(msg)
 
-    async def stop(self, exc_type=None, exc_value=None, exc_traceback=None) -> None:
+    async def astop(self, exc_type=None, exc_value=None, exc_traceback=None) -> None:
         if not self.started:
             return
         if not self.done:
             raise aio.InvalidStateError() from exc_value
-        self.stop_called = True
-        await super().stop(exc_type, exc_value, exc_traceback)
+        self.astop_called = True
+        await super().astop(exc_type, exc_value, exc_traceback)
 
 
 # ===========================================================================
@@ -104,143 +104,143 @@ class TestAsyncTaskInit:
         assert task.context is ctx
 
 
-class TestAsyncTaskStart:
-    async def test_start_sets_started(self) -> None:
+class TestAsyncTaskAstart:
+    async def test_astart_sets_started(self) -> None:
         task = SimpleTask()
-        await task.start()
+        await task.astart()
         assert task.started is True
-        await task.join()
-        await task.stop()
+        await task.ajoin()
+        await task.astop()
 
-    async def test_start_idempotent(self) -> None:
+    async def test_astart_idempotent(self) -> None:
         task = SimpleTask()
-        await task.start()
+        await task.astart()
         fut1 = task._fut
-        await task.start()
+        await task.astart()
         fut2 = task._fut
         assert fut1 is fut2
-        await task.join()
-        await task.stop()
+        await task.ajoin()
+        await task.astop()
 
     async def test_running_while_executing(self) -> None:
         task = SlowTask(delay=0.2)
-        await task.start()
+        await task.astart()
         assert task.running is True
         assert task.done is False
-        await task.join()
+        await task.ajoin()
         assert task.running is False
         assert task.done is True
-        await task.stop()
+        await task.astop()
 
 
-class TestAsyncTaskJoin:
-    async def test_join_without_start_is_noop(self) -> None:
+class TestAsyncTaskAjoin:
+    async def test_ajoin_without_astart_is_noop(self) -> None:
         task = SimpleTask()
-        await task.join()  # should not raise
+        await task.ajoin()  # should not raise
 
-    async def test_join_waits_for_result(self) -> None:
+    async def test_ajoin_waits_for_result(self) -> None:
         task = SimpleTask()
-        await task.start()
-        await task.join()
+        await task.astart()
+        await task.ajoin()
         assert task.done is True
         assert task.result == 42
-        await task.stop()
+        await task.astop()
 
 
 class TestAsyncTaskResult:
     async def test_result_after_completion(self) -> None:
         task = SimpleTask()
-        await task.start()
-        await task.join()
+        await task.astart()
+        await task.ajoin()
         assert task.result == 42
-        await task.stop()
+        await task.astop()
 
     async def test_exception_after_failure(self) -> None:
         task = FailingTask()
-        await task.start()
+        await task.astart()
         with pytest.raises(ValueError, match="boom"):
-            await task.join()
+            await task.ajoin()
         exc = task.exception
         assert isinstance(exc, ValueError)
-        await task.stop()
+        await task.astop()
 
 
-class TestAsyncTaskCancel:
-    async def test_cancel_running_task(self) -> None:
+class TestAsyncTaskAcancel:
+    async def test_acancel_running_task(self) -> None:
         task = SlowTask(delay=10.0)
-        await task.start()
-        await task.cancel()
+        await task.astart()
+        await task.acancel()
         assert task.cancelled is True
         assert task.done is True
-        await task.stop()
+        await task.astop()
 
-    async def test_cancel_with_message(self) -> None:
+    async def test_acancel_with_message(self) -> None:
         task = SlowTask(delay=10.0)
-        await task.start()
-        await task.cancel(msg="abort")
+        await task.astart()
+        await task.acancel(msg="abort")
         assert task.cancelled is True
-        await task.stop()
+        await task.astop()
 
-    async def test_cancel_without_start_is_noop(self) -> None:
+    async def test_acancel_without_astart_is_noop(self) -> None:
         task = SimpleTask()
-        await task.cancel()  # should not raise
+        await task.acancel()  # should not raise
         assert task.started is False
 
 
-class TestAsyncTaskStop:
-    async def test_stop_resets_started(self) -> None:
+class TestAsyncTaskAstop:
+    async def test_astop_resets_started(self) -> None:
         task = SimpleTask()
-        await task.start()
-        await task.join()
-        await task.stop()
+        await task.astart()
+        await task.ajoin()
+        await task.astop()
         assert task.started is False
 
-    async def test_stop_without_start_is_noop(self) -> None:
+    async def test_astop_without_astart_is_noop(self) -> None:
         task = SimpleTask()
-        await task.stop()  # should not raise
+        await task.astop()  # should not raise
 
-    async def test_stop_while_running_raises(self) -> None:
+    async def test_astop_while_running_raises(self) -> None:
         task = SlowTask(delay=10.0)
-        await task.start()
+        await task.astart()
         with pytest.raises(aio.InvalidStateError):
-            await task.stop()
-        await task.cancel()
-        await task.stop()
+            await task.astop()
+        await task.acancel()
+        await task.astop()
 
-    async def test_stop_with_exc_info(self) -> None:
+    async def test_astop_with_exc_info(self) -> None:
         task = SimpleTask()
-        await task.start()
-        await task.join()
-        await task.stop(ValueError, ValueError("test"), None)
+        await task.astart()
+        await task.ajoin()
+        await task.astop(ValueError, ValueError("test"), None)
         assert task.started is False
 
-    async def test_stop_running_raises_with_exc_value_chain(self) -> None:
+    async def test_astop_running_raises_with_exc_value_chain(self) -> None:
         task = SlowTask(delay=10.0)
-        await task.start()
+        await task.astart()
         original = ValueError("original")
         with pytest.raises(aio.InvalidStateError) as exc_info:
-            await task.stop(ValueError, original, None)
+            await task.astop(ValueError, original, None)
         assert exc_info.value.__cause__ is original
-        await task.cancel()
-        await task.stop()
+        await task.acancel()
+        await task.astop()
 
 
 class TestAsyncTaskNotImplemented:
     async def test_bare_task_raises_not_implemented(self) -> None:
         task = BareTask()
-        await task.start()
+        await task.astart()
         with pytest.raises(NotImplementedError):
-            await task.join()
-        await task.stop()
+            await task.ajoin()
+        await task.astop()
 
 
 class TestAsyncTaskAwait:
     async def test_await_returns_result(self) -> None:
         task = SimpleTask()
-        await task.start()
+        await task.astart()
         result = await task
         assert result == 42
-        await task.stop()
+        await task.astop()
 
 
 class TestAsyncTaskContextManager:
@@ -255,15 +255,15 @@ class TestAsyncTaskContextManager:
             async with FailingTask() as task:
                 await task
 
-    async def test_async_with_cancel_before_exit(self) -> None:
+    async def test_async_with_acancel_before_exit(self) -> None:
         async with SlowTask(delay=10.0) as task:
             assert task.started is True
-            await task.cancel()
+            await task.acancel()
         assert task.started is False
 
-    async def test_context_manager_stops_after_done(self) -> None:
+    async def test_context_manager_astops_after_done(self) -> None:
         async with SimpleTask() as task:
-            await task.join()
+            await task.ajoin()
         assert task.started is False
         assert task.done is True
 
@@ -271,45 +271,45 @@ class TestAsyncTaskContextManager:
 class TestAsyncTaskLifecycleOverride:
     async def test_lifecycle_calls(self) -> None:
         task = LifecycleTask()
-        await task.start()
-        assert task.start_called is True
-        await task.join()
-        await task.stop()
-        assert task.stop_called is True
+        await task.astart()
+        assert task.astart_called is True
+        await task.ajoin()
+        await task.astop()
+        assert task.astop_called is True
 
-    async def test_cancel_override(self) -> None:
+    async def test_acancel_override(self) -> None:
         task = LifecycleTask()
-        await task.start()
-        await task.cancel()
-        assert task.cancel_called is True
-        await task.stop()
+        await task.astart()
+        await task.acancel()
+        assert task.acancel_called is True
+        await task.astop()
 
-    async def test_start_idempotent(self) -> None:
+    async def test_astart_idempotent(self) -> None:
         task = LifecycleTask()
-        await task.start()
-        task.start_called = False
-        await task.start()
-        assert task.start_called is False
-        await task.join()
-        await task.stop()
+        await task.astart()
+        task.astart_called = False
+        await task.astart()
+        assert task.astart_called is False
+        await task.ajoin()
+        await task.astop()
 
-    async def test_cancel_without_start_is_noop(self) -> None:
+    async def test_acancel_without_astart_is_noop(self) -> None:
         task = LifecycleTask()
-        await task.cancel()
-        assert task.cancel_called is False
+        await task.acancel()
+        assert task.acancel_called is False
 
-    async def test_stop_without_start_is_noop(self) -> None:
+    async def test_astop_without_astart_is_noop(self) -> None:
         task = LifecycleTask()
-        await task.stop()
-        assert task.stop_called is False
+        await task.astop()
+        assert task.astop_called is False
 
-    async def test_stop_while_running_raises(self) -> None:
+    async def test_astop_while_running_raises(self) -> None:
         task = LifecycleTask()
-        await task.start()
+        await task.astart()
         with pytest.raises(aio.InvalidStateError):
-            await task.stop()
-        await task.cancel()
-        await task.stop()
+            await task.astop()
+        await task.acancel()
+        await task.astop()
 
 
 class TestAsyncTaskContextVar:
@@ -317,26 +317,26 @@ class TestAsyncTaskContextVar:
         var: ContextVar[int] = ContextVar("var")
 
         class CtxTask(AsyncTask[int]):
-            async def _run(self) -> int:
+            async def _atask(self) -> int:
                 return var.get()
 
         ctx = Context()
         ctx.run(var.set, 99)
         task = CtxTask(context=ctx)
-        await task.start()
+        await task.astart()
         result = await task
         assert result == 99
-        await task.stop()
+        await task.astop()
 
 
 class TestAsyncTaskName:
     async def test_name_forwarded(self) -> None:
         task = SimpleTask(name="test-name")
-        await task.start()
+        await task.astart()
         assert isinstance(task._fut, aio.Task)
         assert task._fut.get_name() == "test-name"
-        await task.join()
-        await task.stop()
+        await task.ajoin()
+        await task.astop()
 
 
 # ===========================================================================
@@ -371,7 +371,7 @@ class TestAsyncTaskGroupRun:
                 self._val = val
                 self._delay = delay
 
-            async def _run(self) -> int:
+            async def _atask(self) -> int:
                 await aio.sleep(self._delay)
                 return self._val
 
@@ -390,71 +390,71 @@ class TestAsyncTaskGroupRun:
         assert g.started is False
 
 
-class TestAsyncTaskGroupCancel:
-    async def test_cancel_group(self) -> None:
+class TestAsyncTaskGroupAcancel:
+    async def test_acancel_group(self) -> None:
         t1 = SlowTask(delay=10.0)
         t2 = SlowTask(delay=10.0)
         group = AsyncTaskGroup([t1, t2])
-        await group.start()
-        await group.cancel()
+        await group.astart()
+        await group.acancel()
         assert t1.cancelled is True
         assert t2.cancelled is True
         assert group.cancelled is True
-        await group.stop()
+        await group.astop()
 
-    async def test_cancel_group_without_start(self) -> None:
+    async def test_acancel_group_without_astart(self) -> None:
         group = AsyncTaskGroup([SimpleTask()])
-        await group.cancel()  # should not raise
+        await group.acancel()  # should not raise
         assert group.started is False
 
 
-class TestAsyncTaskGroupStop:
-    async def test_stop_group(self) -> None:
+class TestAsyncTaskGroupAstop:
+    async def test_astop_group(self) -> None:
         t1 = SimpleTask()
         t2 = SimpleTask()
         group = AsyncTaskGroup([t1, t2])
-        await group.start()
-        await group.join()
-        await group.stop()
+        await group.astart()
+        await group.ajoin()
+        await group.astop()
         assert group.started is False
         assert t1.started is False
         assert t2.started is False
 
-    async def test_stop_group_without_start(self) -> None:
+    async def test_astop_group_without_astart(self) -> None:
         group = AsyncTaskGroup([SimpleTask()])
-        await group.stop()  # should not raise
+        await group.astop()  # should not raise
 
-    async def test_stop_running_group_raises(self) -> None:
+    async def test_astop_running_group_raises(self) -> None:
         t1 = SlowTask(delay=10.0)
         group = AsyncTaskGroup([t1])
-        await group.start()
+        await group.astart()
         with pytest.raises(ExceptionGroup):
-            await group.stop()
-        await group.cancel()
-        await group.stop()
+            await group.astop()
+        await group.acancel()
+        await group.astop()
 
 
-class TestAsyncTaskGroupStart:
-    async def test_start_is_idempotent(self) -> None:
+class TestAsyncTaskGroupAstart:
+    async def test_astart_is_idempotent(self) -> None:
         t1 = SimpleTask()
         group = AsyncTaskGroup([t1])
-        await group.start()
+        await group.astart()
         fut1 = group._fut
-        await group.start()
+        await group.astart()
         fut2 = group._fut
         assert fut1 is fut2
-        await group.join()
-        await group.stop()
+        await group.ajoin()
+        await group.astop()
 
-    async def test_start_starts_subtasks(self) -> None:
+    async def test_astart_starts_subtasks(self) -> None:
         t1 = SimpleTask()
         t2 = SimpleTask()
         group = AsyncTaskGroup([t1, t2])
-        await group.start()
+        await group.astart()
         assert t1.started is True
         assert t2.started is True
-        await group.join()
-        await group.stop()
+        await group.ajoin()
+        await group.astop()
 
 
 class TestAsyncTaskGroupContextManager:
@@ -465,10 +465,10 @@ class TestAsyncTaskGroupContextManager:
         assert results == [42]
         assert group.started is False
 
-    async def test_async_with_cancel_group(self) -> None:
+    async def test_async_with_acancel_group(self) -> None:
         t1 = SlowTask(delay=10.0)
         async with AsyncTaskGroup([t1]) as group:
-            await group.cancel()
+            await group.acancel()
         assert group.started is False
 
 
@@ -477,10 +477,10 @@ class TestAsyncTaskGroupFailure:
         t1 = SimpleTask()
         t2 = FailingTask()
         group = AsyncTaskGroup([t1, t2])
-        await group.start()
+        await group.astart()
         with pytest.raises(ExceptionGroup):
-            await group.join()
-        await group.stop()
+            await group.ajoin()
+        await group.astop()
 
 
 class TestModuleExports:

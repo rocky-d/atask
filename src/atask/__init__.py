@@ -21,10 +21,10 @@ class AsyncTask[T](Awaitable[T]):
     Bridges `asyncio.Task` with class resource management.
 
     Lifecycle:
-        `__init__` -> `start` -> `_run` -> (`join` | `cancel`) -> `stop`
+        `__init__` -> `astart` -> `_atask` -> (`ajoin` | `acancel`) -> `astop`
 
-    Subclasses override `_run` to define task logic. Parameters are passed via
-    `__init__`, not `_run`. Override `start`, `cancel`, `stop` for resource
+    Subclasses override `_atask` to define task logic. Parameters are passed via
+    `__init__`, not `_atask`. Override `astart`, `acancel`, `astop` for resource
     management (always call `super()`).
 
     Supports `await`, `async with`, and manual control flow.
@@ -33,17 +33,17 @@ class AsyncTask[T](Awaitable[T]):
         Define a task:
 
             class MyTask(AsyncTask[int]):
-                async def _run(self) -> int:
+                async def _atask(self) -> int:
                     await asyncio.sleep(1.0)
                     return 22
 
         Manual lifecycle:
 
             task = MyTask()
-            await task.start()
-            await task.join()
+            await task.astart()
+            await task.ajoin()
             task.result  # 22
-            await task.stop()
+            await task.astop()
 
         Async context manager:
 
@@ -60,7 +60,7 @@ class AsyncTask[T](Awaitable[T]):
         """Initializes the task in a finished, unstarted state.
 
         The internal future starts done with `asyncio.InvalidStateError` so
-        `start` is the sole transition into running state.
+        `astart` is the sole transition into running state.
 
         Args:
             name: Optional name forwarded to `asyncio.create_task`.
@@ -78,7 +78,7 @@ class AsyncTask[T](Awaitable[T]):
         self,
     ) -> Generator[Any, None, T]:
         """Awaits task completion and returns the result."""
-        yield from self.join().__await__()
+        yield from self.ajoin().__await__()
         return self.result
 
     @final
@@ -86,7 +86,7 @@ class AsyncTask[T](Awaitable[T]):
         self,
     ) -> Self:
         """Starts the task for use as an async context manager."""
-        await self.start()
+        await self.astart()
         return self
 
     @final
@@ -97,7 +97,7 @@ class AsyncTask[T](Awaitable[T]):
         exc_traceback: TracebackType | None,
     ) -> None:
         """Stops the task upon exiting the async context."""
-        await self.stop(exc_type, exc_value, exc_traceback)
+        await self.astop(exc_type, exc_value, exc_traceback)
 
     @final
     @property
@@ -163,7 +163,7 @@ class AsyncTask[T](Awaitable[T]):
         """The exception raised by the task, or `None` on success."""
         return self._fut.exception()
 
-    async def _run(
+    async def _atask(
         self,
     ) -> T:
         """Defines the task's async logic.
@@ -179,21 +179,25 @@ class AsyncTask[T](Awaitable[T]):
         """
         raise NotImplementedError()
 
-    async def start(
+    async def astart(
         self,
     ) -> None:
         """Acquires resources and starts the task.
 
         No-op if already started. Overrides should acquire resources before
-        calling `super().start()`.
+        calling `super().astart()`.
         """
         if self.started:
             return
         self._started = True
-        self._fut = aio.create_task(self._run(), name=self._name, context=self._context)
+        self._fut = aio.create_task(
+            self._atask(),
+            name=self._name,
+            context=self._context,
+        )
 
     @final
-    async def join(
+    async def ajoin(
         self,
     ) -> None:
         """Waits for the task to complete. No-op if not started."""
@@ -201,14 +205,14 @@ class AsyncTask[T](Awaitable[T]):
             return
         await self._fut
 
-    async def cancel(
+    async def acancel(
         self,
         msg: Any | None = None,
     ) -> None:
         """Cancels the running task.
 
         No-op if not started. Overrides should cancel managed resources
-        before calling `super().cancel()`.
+        before calling `super().acancel()`.
 
         Args:
             msg: Optional cancellation message.
@@ -221,7 +225,7 @@ class AsyncTask[T](Awaitable[T]):
         except aio.CancelledError:
             pass
 
-    async def stop(
+    async def astop(
         self,
         exc_type: Type[BaseException] | None = None,
         exc_value: BaseException | None = None,
@@ -231,7 +235,7 @@ class AsyncTask[T](Awaitable[T]):
 
         Requires the task to be started and done. Raises if the task is
         still running. Overrides should release managed resources before
-        calling `super().stop()`.
+        calling `super().astop()`.
 
         Args:
             exc_type: Exception type from the async context manager, if any.
@@ -279,7 +283,7 @@ class AsyncTaskGroup[T](AsyncTask[list[T]]):
         super().__init__(name=name, context=context)
         self._atsks = list(atsks)
 
-    async def _run(
+    async def _atask(
         self,
     ) -> list[T]:
         """Joins all subtasks concurrently and collects their results.
@@ -289,10 +293,10 @@ class AsyncTaskGroup[T](AsyncTask[list[T]]):
         """
         async with aio.TaskGroup() as tg:
             for atsk in self._atsks:
-                tg.create_task(atsk.join())
+                tg.create_task(atsk.ajoin())
         return [atsk.result for atsk in self._atsks]
 
-    async def start(
+    async def astart(
         self,
     ) -> None:
         """Starts all subtasks concurrently, then starts the group task."""
@@ -300,10 +304,10 @@ class AsyncTaskGroup[T](AsyncTask[list[T]]):
             return
         async with aio.TaskGroup() as tg:
             for atsk in self._atsks:
-                tg.create_task(atsk.start())
-        await super().start()
+                tg.create_task(atsk.astart())
+        await super().astart()
 
-    async def cancel(
+    async def acancel(
         self,
         msg: Any | None = None,
     ) -> None:
@@ -316,10 +320,10 @@ class AsyncTaskGroup[T](AsyncTask[list[T]]):
             return
         async with aio.TaskGroup() as tg:
             for atsk in self._atsks:
-                tg.create_task(atsk.cancel(msg))
-        await super().cancel(msg)
+                tg.create_task(atsk.acancel(msg))
+        await super().acancel(msg)
 
-    async def stop(
+    async def astop(
         self,
         exc_type: Type[BaseException] | None = None,
         exc_value: BaseException | None = None,
@@ -339,5 +343,5 @@ class AsyncTaskGroup[T](AsyncTask[list[T]]):
             return
         async with aio.TaskGroup() as tg:
             for atsk in self._atsks:
-                tg.create_task(atsk.stop(exc_type, exc_value, exc_traceback))
-        await super().stop(exc_type, exc_value, exc_traceback)
+                tg.create_task(atsk.astop(exc_type, exc_value, exc_traceback))
+        await super().astop(exc_type, exc_value, exc_traceback)
