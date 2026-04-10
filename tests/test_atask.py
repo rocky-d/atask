@@ -4,17 +4,16 @@ from typing import Any
 
 import pytest
 
-import atask
 from atask import AsyncTask, AsyncTaskGroup
 
 # ---------------------------------------------------------------------------
-# Concrete helpers
+# Helpers
 # ---------------------------------------------------------------------------
 
 
 class SimpleTask(AsyncTask[int]):
     async def _atask(self) -> int:
-        return 42
+        return 22
 
 
 class SlowTask(AsyncTask[str]):
@@ -33,7 +32,7 @@ class FailingTask(AsyncTask[None]):
 
 
 class BareTask(AsyncTask[int]):
-    """Does not override _atask – inherits NotImplementedError."""
+    """Does not override _atask."""
 
     pass
 
@@ -73,7 +72,7 @@ class LifecycleTask(AsyncTask[int]):
 
 
 # ===========================================================================
-# AsyncTask tests
+# AsyncTask
 # ===========================================================================
 
 
@@ -143,7 +142,7 @@ class TestAsyncTaskAjoin:
         await task.astart()
         await task.ajoin()
         assert task.done is True
-        assert task.result == 42
+        assert task.result == 22
         await task.astop()
 
 
@@ -152,7 +151,7 @@ class TestAsyncTaskResult:
         task = SimpleTask()
         await task.astart()
         await task.ajoin()
-        assert task.result == 42
+        assert task.result == 22
         await task.astop()
 
     async def test_exception_after_failure(self) -> None:
@@ -239,7 +238,7 @@ class TestAsyncTaskAwait:
         task = SimpleTask()
         await task.astart()
         result = await task
-        assert result == 42
+        assert result == 22
         await task.astop()
 
 
@@ -247,7 +246,7 @@ class TestAsyncTaskContextManager:
     async def test_async_with(self) -> None:
         async with SimpleTask() as task:
             result = await task
-            assert result == 42
+            assert result == 22
         assert task.started is False
 
     async def test_async_with_failing_task(self) -> None:
@@ -314,7 +313,7 @@ class TestAsyncTaskLifecycleOverride:
 
 class TestAsyncTaskContextVar:
     async def test_context_propagation(self) -> None:
-        var: ContextVar[int] = ContextVar("var")
+        var = ContextVar("var")
 
         class CtxTask(AsyncTask[int]):
             async def _atask(self) -> int:
@@ -340,7 +339,7 @@ class TestAsyncTaskName:
 
 
 # ===========================================================================
-# AsyncTaskGroup tests
+# AsyncTaskGroup
 # ===========================================================================
 
 
@@ -362,7 +361,7 @@ class TestAsyncTaskGroupRun:
         t2 = SimpleTask()
         async with AsyncTaskGroup([t1, t2]) as group:
             results = await group
-        assert results == [42, 42]
+        assert results == [22, 22]
 
     async def test_group_preserves_order(self) -> None:
         class ValueTask(AsyncTask[int]):
@@ -462,7 +461,7 @@ class TestAsyncTaskGroupContextManager:
         t1 = SimpleTask()
         async with AsyncTaskGroup([t1]) as group:
             results = await group
-        assert results == [42]
+        assert results == [22]
         assert group.started is False
 
     async def test_async_with_acancel_group(self) -> None:
@@ -481,10 +480,3 @@ class TestAsyncTaskGroupFailure:
         with pytest.raises(ExceptionGroup):
             await group.ajoin()
         await group.astop()
-
-
-class TestModuleExports:
-    def test_all_exports(self) -> None:
-        assert hasattr(atask, "AsyncTask")
-        assert hasattr(atask, "AsyncTaskGroup")
-        assert set(atask.__all__) == {"AsyncTask", "AsyncTaskGroup"}

@@ -78,7 +78,7 @@ class AsyncTask[T](Awaitable[T]):
         self,
     ) -> Generator[Any, None, T]:
         """Awaits task completion and returns the result."""
-        yield from self.ajoin().__await__()
+        yield from self._fut.__await__()
         return self.result
 
     @final
