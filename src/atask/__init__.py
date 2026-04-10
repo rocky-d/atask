@@ -199,7 +199,10 @@ class AsyncTask[T](Awaitable[T]):
     async def ajoin(
         self,
     ) -> None:
-        """Waits for the task to complete. No-op if not started."""
+        """Waits for the task to complete.
+
+        No-op if not started.
+        """
         if not self.started:
             return
         await self._fut
