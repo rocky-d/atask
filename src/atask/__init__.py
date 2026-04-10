@@ -168,8 +168,8 @@ class AsyncTask[T](Awaitable[T]):
     ) -> T:
         """Defines the task's async logic.
 
-        Subclasses must override this. Accepts no arguments beyond `self`;
-        configure parameters via `__init__` instead.
+        Subclasses must override this, which accepts no arguments beyond `self`.
+        Configure parameters via `__init__` instead.
 
         Returns:
             The task result of type `T`.
@@ -184,8 +184,7 @@ class AsyncTask[T](Awaitable[T]):
     ) -> None:
         """Acquires resources and starts the task.
 
-        No-op if already started. Overrides should acquire resources before
-        calling `super().astart()`.
+        No-op if started.
         """
         if self.started:
             return
@@ -211,8 +210,7 @@ class AsyncTask[T](Awaitable[T]):
     ) -> None:
         """Cancels the running task.
 
-        No-op if not started. Overrides should cancel managed resources
-        before calling `super().acancel()`.
+        No-op if not started.
 
         Args:
             msg: Optional cancellation message.
@@ -233,9 +231,7 @@ class AsyncTask[T](Awaitable[T]):
     ) -> None:
         """Releases resources after the task has finished.
 
-        Requires the task to be started and done. Raises if the task is
-        still running. Overrides should release managed resources before
-        calling `super().astop()`.
+        No-op if not started. Raises if the task is not done.
 
         Args:
             exc_type: Exception type from the async context manager, if any.
@@ -243,7 +239,7 @@ class AsyncTask[T](Awaitable[T]):
             exc_traceback: Traceback from the async context manager, if any.
 
         Raises:
-            asyncio.InvalidStateError: If the task is still running.
+            asyncio.InvalidStateError: If the task is not done.
         """
         if not self.started:
             return
@@ -337,7 +333,7 @@ class AsyncTaskGroup[T](AsyncTask[list[T]]):
             exc_traceback: Traceback from the async context manager, if any.
 
         Raises:
-            asyncio.InvalidStateError: If any task is still running.
+            asyncio.InvalidStateError: If any task is not done.
         """
         if not self.started:
             return
